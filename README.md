@@ -36,6 +36,9 @@ L'arboresence du git est la suivante :
 
 ## Sources 
 
+Documentation pour le module de tracer Matplotlib : 
+* https://matplotlib.org/stable/tutorials/introductory/usage.html
+
 Je me suis grandement basé sur les cours de Clayton Pettit sur Youtube qui applique la méthode des éléments finis à la mécanique : 
 - <https://www.youtube.com/watch?v=IzUfWuh8B8Q> : Cours sur modéle Euler Bernoulli pour element 1D
 - <https://www.youtube.com/watch?v=rl8QPPNrWSY> : Cours sur Solid Element
