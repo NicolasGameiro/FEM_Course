@@ -71,7 +71,7 @@ elif cas == 3 :
 elif cas == 4 : 
     F = np.array([[0, 0, 0],
                   [0, 0, 0],
-                  [100,100,0],
+                  [100,0,0],
                   [0, 0, 0]])
 
 F = np.vstack(F.flatten())

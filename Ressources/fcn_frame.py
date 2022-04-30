@@ -20,7 +20,7 @@ from prettytable import PrettyTable as pt
 def Rot(c,s) : 
     Rotation_matrix =  np.array([[c, s , 0, 0 , 0, 0],
                                  [-s, c, 0, 0 , 0, 0],
-                                 [0, 0, 0, 1, 0 , 0],
+                                 [0, 0, 1, 0, 0 , 0],
                                  [0, 0 , 0 ,c ,s , 0 ],
                                  [0, 0, 0, -s, c, 0],
                                  [0, 0, 0, 0, 0 , 1]])
