@@ -155,6 +155,11 @@ class FEM_Model() :
                                      [0, 0, 0, 0, 0 , 1]])
         return Rotation_matrix
     
+    def mini_rot(self,c,s) : 
+        R = np.array([[c, s],
+                      [-s, c]])
+        return R
+    
     def K_elem(self,L_e) :
         S = self.mesh.S
         I = self.mesh.Iy
@@ -286,6 +291,61 @@ class FEM_Model() :
         #plt.axis('equal')
         plt.show()
         return
+    
+    def interpol(self,x1,x2,y1,y2,y3,y4,r) : 
+        x3 = x1
+        x4 = x2
+        V = np.array([[1, x1, x1**2, x1**3],
+                      [1, x2, x2**2, x2**3],
+                      [0,1, 2*x3, 3*x3**2],
+                      [0,1, 2*x4, 3*x4**2]])
+        print(V)
+        R = np.array([y1,y2,y3,y4])
+        R = np.vstack(R)
+        P = np.hstack(inv(V).dot(R))
+        P = P[::-1]
+        p = np.poly1d([x for x in P])
+        x = np.linspace(x1,x2,r)
+        y = p(x)
+        return x,y
+    
+    def plot_disp_f_ex(self,scale=1e5,r=150) :
+        NL = self.mesh.node_list
+        EL = self.mesh.element_list
+        U = self.U
+        x_scatter = []
+        y_scatter = []
+        color = []
+        plt.figure()
+        for i in range(len(EL)) :
+            xi,xj = NL[EL[i,0]-1,0],NL[EL[i,1]-1,0]
+            yi,yj = NL[EL[i,0]-1,1],NL[EL[i,1]-1,1]
+            plt.plot([xi,xj],[yi,yj],color = 'k', lw = 1, linestyle = '--')
+        for i in range(len(EL)) :
+            x1 = NL[EL[i,0]-1,0]+U[(EL[i,0]-1)*3]*scale
+            x2 = NL[EL[i,1]-1,0]+U[(EL[i,1]-1)*3]*scale
+            y1 = NL[EL[i,0]-1,1]+U[(EL[i,0]-1)*3+1]*scale
+            y2 = NL[EL[i,1]-1,1]+U[(EL[i,1]-1)*3+1]*scale
+            y3 = U[(EL[i,0]-1)*3+2]
+            y4 = U[(EL[i,1]-1)*3+2]
+            L_e = np.sqrt((x2-x1)**2 + (y2-y1)**2)
+            c = (x2-x1)/L_e
+            s = (y2-y1)/L_e
+            R = self.mini_rot(c,s)
+            x,y = self.interpol(x1[0],x2[0],y1[0],y2[0],y3[0],y4[0],r)
+            x_scatter.append(x.dot(R))
+            y_scatter.append(y.dot(R))
+            color.append(np.linspace(U[(EL[i,0]-1)*3+1],U[(EL[i,1]-1)*3+1],r))
+        #Permet de reverse la barre de couleur si max negatif 
+        if min(U) > 0 :
+            cmap = plt.get_cmap('jet')
+        elif min(U) <= 0 : 
+            cmap = plt.get_cmap('jet_r')
+        plt.scatter(x_scatter,y_scatter,c = color,cmap = cmap,s=10, edgecolor = 'none' )
+        plt.colorbar(label='disp'
+                     , orientation='vertical') #ScalarMappable(norm = norm_x, cmap = cmap ))
+        plt.axis('equal')
+        return
 
     def plot_disp_f(self,scale=1e4,r=150,dir='x') :
         NL = self.mesh.node_list
@@ -375,7 +435,7 @@ def test_2d() :
     mesh.node_table()
     
     f = FEM_Model(mesh)
-    f.apply_load([0,-1000,0],4)
+    f.apply_load([2000,-1000,0],4)
     f.apply_bc([1,1,1],1)
     f.apply_bc([0,1,0],3)
     f.apply_distributed_load(1000, [1,2])
@@ -386,6 +446,7 @@ def test_2d() :
     f.plot_disp_f(dir='x')
     f.plot_disp_f(dir='y')
     f.plot_disp_f(dir='sum')
+    f.plot_disp_f_ex()
     f.U_table()
     f.R_table()
     f.stress()
