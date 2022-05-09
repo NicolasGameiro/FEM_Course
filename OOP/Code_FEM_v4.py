@@ -18,13 +18,16 @@ from mpl_toolkits import mplot3d
 from matplotlib.animation import FuncAnimation
 
 class Mesh : 
-    def __init__(self, dim, node_list = [], element_list = [], h = 0.22, b = 0.10) :
+    def __init__(self, dim, node_list = [], element_list = [], S_list = [], I_list = [], h = 0.22, b = 0.10, debug = False) :
         self.dim = dim
         self.node_list = np.array(node_list)
         self.element_list = np.array(element_list)
+        self.S_list = np.array(S_list)
+        self.I_list = np.array(I_list)
         self.S = h*b
         self.Iy = b*h**3/12
         self.Iz = h*b**3/12
+        self.debug = debug
     
     def add_node(self,node) : 
         if len(node) != self.dim : 
@@ -32,6 +35,8 @@ class Mesh :
         else :
             self.node_list = np.append(self.node_list,[node], axis=0)
             print("noeud added")
+            if self.debug == True : 
+                print(self.node_list)
     
     def add_element(self, element) : 
         if len(element) != 2 : 
@@ -39,6 +44,11 @@ class Mesh :
         else :
             self.element_list = np.append(self.element_list,[element], axis=0)
             print("element added")
+            if self.debug == True : 
+                print(self.element_list)
+                
+    def add_section(self,S) : 
+        self.S_list = np.append(self.S_list,[S], axis=0)
         
     def node_table(self):
         tab = pt()
@@ -60,12 +70,13 @@ class Mesh :
     
     def geom(self) : 
         if self.dim == 2 :
-            self.geom2D()
+            fig = self.geom2D()
         else : 
-            self.geom3D()
+            fig = self.geom3D()
+        return fig
     
     def geom2D(self) : 
-        plt.figure()
+        fig = plt.figure(figsize=(8,6))
         x = [x for x in self.node_list[:,0]]
         y = [y for y in self.node_list[:,1]]
         size = 200
@@ -79,6 +90,7 @@ class Mesh :
             plt.plot([xi,xj],[yi,yj],color = 'k', lw = 1, linestyle = '--')
         plt.axis('equal')
         plt.grid()
+        return fig
     
     def geom3D(self) : 
         fig = plt.figure(figsize=(8,6))
@@ -101,6 +113,7 @@ class Mesh :
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.set_box_aspect([1,1,1])
+        return fig
         
 class FEM_Model() : 
     def __init__(self, mesh, E = 2.1E11) :
@@ -123,6 +136,8 @@ class FEM_Model() :
         else :
             self.load[node-1,:] = node_load
             print("nodal load applied")
+            if self.mesh.debug == True :
+                print(self.load)
             
     def apply_distributed_load(self,q,element):
         L = self.get_length(element)
@@ -309,7 +324,7 @@ class FEM_Model() :
         y = p(x)
         return x,y
     
-    def plot_disp_f_ex(self,scale=1e5,r=150) :
+    def plot_disp_f_ex(self,scale=1e4,r=150) :
         NL = self.mesh.node_list
         EL = self.mesh.element_list
         U = self.U
@@ -329,12 +344,13 @@ class FEM_Model() :
             y3 = U[(EL[i,0]-1)*3+2]
             y4 = U[(EL[i,1]-1)*3+2]
             L_e = np.sqrt((x2-x1)**2 + (y2-y1)**2)
-            c = (x2-x1)/L_e
-            s = (y2-y1)/L_e
-            R = self.mini_rot(c,s)
-            x,y = self.interpol(x1[0],x2[0],y1[0],y2[0],y3[0],y4[0],r)
-            x_scatter.append(x.dot(R))
-            y_scatter.append(y.dot(R))
+            c = np.round((x2-x1)/L_e,2)
+            print("c =", c)
+            a = np.arccos(c)%1
+            print("a = ", a)
+            x,y = self.interpol(x1[0],x2[0],y1[0],y2[0],y3[0] + a,-y4[0] + a,r)
+            x_scatter.append(x)
+            y_scatter.append(y)
             color.append(np.linspace(U[(EL[i,0]-1)*3+1],U[(EL[i,1]-1)*3+1],r))
         #Permet de reverse la barre de couleur si max negatif 
         if min(U) > 0 :
@@ -361,14 +377,17 @@ class FEM_Model() :
             plt.plot([xi,xj],[yi,yj],color = 'k', lw = 1, linestyle = '--')
         for i in range(len(EL)) :
             if dir == 'y' : 
+                plt.title("y")
                 x_scatter.append(np.linspace(NL[EL[i,0]-1,0],NL[EL[i,1]-1,0],r))
                 y_scatter.append(np.linspace(NL[EL[i,0]-1,1]+U[(EL[i,0]-1)*3+1]*scale,NL[EL[i,1]-1,1]+U[(EL[i,1]-1)*3+1]*scale,r))
                 color.append(np.linspace(U[(EL[i,0]-1)*3+1],U[(EL[i,1]-1)*3+1],r))
             elif dir == "x" : 
+                plt.title("x")
                 x_scatter.append(np.linspace(NL[EL[i,0]-1,0]+U[(EL[i,0]-1)*3]*scale,NL[EL[i,1]-1,0]+U[(EL[i,1]-1)*3]*scale,r))
                 y_scatter.append(np.linspace(NL[EL[i,0]-1,1],NL[EL[i,1]-1,1],r))
                 color.append(np.linspace(U[(EL[i,0]-1)*3],U[(EL[i,1]-1)*3],r))
             elif dir == "sum" : 
+                plt.title("sum")
                 x_scatter.append(np.linspace(NL[EL[i,0]-1,0]+U[(EL[i,0]-1)*3]*scale,NL[EL[i,1]-1,0]+U[(EL[i,1]-1)*3]*scale,r))
                 y_scatter.append(np.linspace(NL[EL[i,0]-1,1]+U[(EL[i,0]-1)*3+1]*scale,NL[EL[i,1]-1,1]+U[(EL[i,1]-1)*3+1]*scale,r))
                 color.append(np.linspace(U[(EL[i,0]-1)*3]+U[(EL[i,0]-1)*3+1],U[(EL[i,1]-1)*3]+U[(EL[i,1]-1)*3+1],r))
@@ -435,9 +454,9 @@ def test_2d() :
     mesh.node_table()
     
     f = FEM_Model(mesh)
-    f.apply_load([2000,-1000,0],4)
+    f.apply_load([0,-1000,0],4)
     f.apply_bc([1,1,1],1)
-    f.apply_bc([0,1,0],3)
+    f.apply_bc([1,1,0],3)
     f.apply_distributed_load(1000, [1,2])
     f.apply_distributed_load(1000, [2,3])
     f.plot_forces()
@@ -450,6 +469,26 @@ def test_2d() :
     f.U_table()
     f.R_table()
     f.stress()
+    return 
+
+def test_cantilever() : 
+    mesh = Mesh(2,[[0,0],[3,0]],[[1,2]],debug=False)
+    mesh.add_node([4,0])
+    mesh.add_node([5,0])
+    mesh.add_node([6,0])
+    mesh.add_element([2,3])
+    mesh.add_element([3,4])
+    mesh.add_element([4,5])
+    mesh.node_table()
+    f = FEM_Model(mesh)
+    f.apply_load([0,-1000,0],5)
+    f.apply_bc([1,1,1],1)
+    f.plot_forces()
+    f.solver_frame()
+    U, React = f.get_res()
+    f.plot_disp_f_ex(scale=1e2)
+    f.plot_disp_f(scale=1e2,dir='y')
+    f.U_table()
     return 
 
 if __name__ == "__main__" :
