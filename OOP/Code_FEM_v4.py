@@ -5,6 +5,17 @@ Created on Sun May  1 12:41:46 2022
 @author: ngameiro
 """
 
+"""[Summary]
+
+:param [ParamName]: [ParamDescription], defaults to [DefaultParamVal]
+:type [ParamName]: [ParamType](, optional)
+...
+:raises [ErrorType]: [ErrorDescription]
+...
+:return: [ReturnDescription]
+:rtype: [ReturnType]
+"""
+
 from prettytable import PrettyTable as pt
 import numpy as np
 from numpy.linalg import inv
@@ -16,6 +27,9 @@ rcParams['font.size'] = 10
 from mpl_toolkits import mplot3d
 #%matplotlib notebook
 from matplotlib.animation import FuncAnimation
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm
+import time, datetime
 
 class Mesh : 
     def __init__(self, dim, node_list = [], element_list = [], S_list = [], I_list = [], h = 0.22, b = 0.10, debug = False) :
@@ -33,17 +47,77 @@ class Mesh :
         if len(node) != self.dim : 
             print("Error : uncorrect node format")
         else :
-            self.node_list = np.append(self.node_list,[node], axis=0)
-            print("noeud added")
+            found, index = self.check_node(node)
+            if found == False : 
+                self.node_list = np.append(self.node_list,[node], axis=0)
+                print("noeud added")
+            else :
+                print("noeud not added")
+        if self.debug == True : 
+            print(self.node_list)
+                
+    def check_node(self,node) : 
+        index = -1
+        found = False
+        while (found is not True) and (index+1 < len(self.node_list)) : 
+            index += 1
+            if (self.node_list[index][0] == node[0]) and (self.node_list[index][1] == node[1]) :
+                found = True
+        return found, index
+        
+    
+    def del_node(self,node) : 
+        if len(node) != self.dim : 
+            print("Error : uncorrect node format")
+        else :
+            found, index = self.check_node(node)
+            if found == True :
+                self.node_list = np.delete(self.node_list, index , 0)
+                print("noeud deleted")
+            else : 
+                print("node not found")            
             if self.debug == True : 
                 print(self.node_list)
+                
+    def reset_node(self) : 
+        self.node_list = np.array([])
+        print("liste des noeuds cleared")
+        if self.debug == True : 
+            print(self.node_list)
+        return
     
-    def add_element(self, element) : 
+    def check_elem(self,elem) : 
+        index = -1
+        found = False
+        while (found is not True) and (index+1 < len(self.element_list)) : 
+            index += 1
+            if (self.element_list[index][0] == elem[0]) and (self.element_list[index][1] == elem[1]) :
+                found = True
+        return found, index
+    
+    def add_element(self,elem) : 
+        if len(elem) != self.dim : 
+            print("Error : uncorrect node format")
+        else :
+            found, index = self.check_elem(elem)
+            if found == False : 
+                self.element_list = np.append(self.element_list,[elem], axis=0)
+                print("element added")
+            else :
+                print("element not added")
+            if self.debug == True : 
+                print(self.element_list)
+    
+    def del_element(self, element) : 
         if len(element) != 2 : 
             print("Error : uncorrect element format")
         else :
-            self.element_list = np.append(self.element_list,[element], axis=0)
-            print("element added")
+            found, index = self.check_elem(element)
+            if found == True :
+                self.element_list = np.delete(self.element_list, index , 0)
+                print("element deleted")
+            else : 
+                print("element not found")   
             if self.debug == True : 
                 print(self.element_list)
                 
@@ -68,14 +142,14 @@ class Mesh :
     - Nombre d'éléments : {len(self.element_list)}
     """
     
-    def geom(self) : 
+    def geom(self, pic = False) : 
         if self.dim == 2 :
             fig = self.geom2D()
         else : 
             fig = self.geom3D()
         return fig
     
-    def geom2D(self) : 
+    def geom2D(self, pic = False) : 
         fig = plt.figure(figsize=(8,6))
         x = [x for x in self.node_list[:,0]]
         y = [y for y in self.node_list[:,1]]
@@ -90,9 +164,11 @@ class Mesh :
             plt.plot([xi,xj],[yi,yj],color = 'k', lw = 1, linestyle = '--')
         plt.axis('equal')
         plt.grid()
+        if pic : 
+            plt.savefig('geom.png', format='png', dpi=200)
         return fig
     
-    def geom3D(self) : 
+    def geom3D(self, pic = False) : 
         fig = plt.figure(figsize=(8,6))
         #plt.gca(projection='3d')
         ax = fig.add_subplot(111, projection='3d')
@@ -113,6 +189,8 @@ class Mesh :
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.set_box_aspect([1,1,1])
+        if pic : 
+            plt.savefig('geom.png', format='png', dpi=200)
         return fig
         
 class FEM_Model() : 
@@ -241,25 +319,62 @@ class FEM_Model() :
         return BB
     
     def get_length(self,element) : 
-        NL = self.mesh.node_list
         noeud1 = element[0]
         noeud2 = element[1]
-        x_1, x_2, y_1, y_2 = NL[noeud1-1,0],NL[noeud2-1,0],NL[noeud1-1,1],NL[noeud2-1,1]
+        x_1 = self.mesh.node_list[noeud1-1,0]
+        x_2 = self.mesh.node_list[noeud2-1,0]
+        y_1 = self.mesh.node_list[noeud1-1,1]
+        y_2 = self.mesh.node_list[noeud2-1,1]
         L_e = np.sqrt((x_2-x_1)**2 + (y_2-y_1)**2)
         return L_e
+    
+    def get_angle(self,element) : 
+        """ Return the cosinus and the sinus associated with the angle of the element
+        in the global coordinate
+
+        :return: tuple with cosinus and sinus
+        :rtype: 2-uple
+        """
+        noeud1 = element[0]
+        noeud2 = element[1]
+        x_1 = self.mesh.node_list[noeud1-1,0]
+        x_2 = self.mesh.node_list[noeud2-1,0]
+        y_1 = self.mesh.node_list[noeud1-1,1]
+        y_2 = self.mesh.node_list[noeud2-1,1]
+        L_e = np.sqrt((x_2-x_1)**2 + (y_2-y_1)**2)
+        c = (x_2-x_1)/L_e
+        s = (y_2-y_1)/L_e
+        return c,s
+    
+    def get_bc(self) : 
+        """Return the boundary condition in a matrix format
+        
+        :return: matrix with 1 if the dof is blocked and 0 if the dof is free
+        :rtype: np.array
+        """
+        BC = np.zeros(3*len(self.mesh.node_list))
+        for i in self.lbc : 
+            BC[i] = 1
+        BC = BC.reshape((len(self.mesh.node_list),3))
+        print(BC)
+        return BC
+        
 
     def assemblage_2D(self) :
+        """ Return the global stiffness matrix of the mesh
+        
+        :return: matrix of size(dll*3*nb_node,dll*3*nb_node)
+        :rtype: np.array
+
+        """
         BB = self.changement_coord()
         NL = self.mesh.node_list
         EL = self.mesh.element_list
         M_global = np.zeros([len(NL)*3,len(NL)*3])
         for i in range(len(EL)) :
-            noeud1 = EL[i,0]
-            noeud2 = EL[i,1]
-            x_1, x_2, y_1, y_2 = NL[noeud1-1,0],NL[noeud2-1,0],NL[noeud1-1,1],NL[noeud2-1,1]
-            L_e = np.sqrt((x_2-x_1)**2 + (y_2-y_1)**2)
-            c = (x_2-x_1)/L_e
-            s = (y_2-y_1)/L_e
+            element = EL[i]
+            L_e = self.get_length(element)
+            c,s = self.get_angle(element)
             rot = self.Rot(c,s)
             # rotation matrice elem
             K_rot = rot.dot(self.K_elem(L_e)).dot(np.transpose(rot))
@@ -281,9 +396,19 @@ class FEM_Model() :
         self.React = K_glob.dot(self.U) - F
     
     def get_res(self):
-        return self.U, self.React
+        self.res = {}
+        self.res['U'] = []
+        self.res['React'] = []
+        self.res['node'] = []
+        self.res['elem'] = []
+        for i in range(len(self.mesh.node_list)) : 
+            self.res['U'].append({'node' : i + 1 , 'Ux' : self.U[i][0] , 'Uy' : self.U[i+1][0] , 'phi' : self.U[i+2][0]})
+            self.res['React'].append({'node' : i + 1 , 'Fx' : self.React[i][0] , 'Fy' : self.React[i+1][0] , 'Mz' : self.React[i+2][0]})
+            self.res['node'].append({'node' : i + 1 , 'X' : self.mesh.node_list[i][0] , 'Y' : self.mesh.node_list[i][1]})
+            self.res['elem'].append({'elem' : i + 1 , 'node i' : self.mesh.element_list[i][0] , 'node j' : self.mesh.element_list[i][1]})
+        return self.U, self.React, self.res
     
-    def plot_forces(self) :
+    def plot_forces(self, pic = False) :
         plt.figure()
         F = self.load
         NL = self.mesh.node_list
@@ -304,7 +429,9 @@ class FEM_Model() :
         plt.ylim([-1,4])
         plt.xlim([-1,5])
         #plt.axis('equal')
-        plt.show()
+        #plt.show()
+        if pic : 
+            plt.savefig('load.png', format='png', dpi=200)
         return
     
     def interpol(self,x1,x2,y1,y2,y3,y4,r) : 
@@ -314,7 +441,7 @@ class FEM_Model() :
                       [1, x2, x2**2, x2**3],
                       [0,1, 2*x3, 3*x3**2],
                       [0,1, 2*x4, 3*x4**2]])
-        print(V)
+        #print(V)
         R = np.array([y1,y2,y3,y4])
         R = np.vstack(R)
         P = np.hstack(inv(V).dot(R))
@@ -345,9 +472,9 @@ class FEM_Model() :
             y4 = U[(EL[i,1]-1)*3+2]
             L_e = np.sqrt((x2-x1)**2 + (y2-y1)**2)
             c = np.round((x2-x1)/L_e,2)
-            print("c =", c)
+            #print("c =", c)
             a = np.arccos(c)%1
-            print("a = ", a)
+            #print("a = ", a)
             x,y = self.interpol(x1[0],x2[0],y1[0],y2[0],y3[0] + a,-y4[0] + a,r)
             x_scatter.append(x)
             y_scatter.append(y)
@@ -363,7 +490,7 @@ class FEM_Model() :
         plt.axis('equal')
         return
 
-    def plot_disp_f(self,scale=1e4,r=150,dir='x') :
+    def plot_disp_f(self,scale=1e4,r=150,dir='x', pic = False) :
         NL = self.mesh.node_list
         EL = self.mesh.element_list
         U = self.U
@@ -400,6 +527,8 @@ class FEM_Model() :
         plt.colorbar(label='disp'
                      , orientation='vertical') #ScalarMappable(norm = norm_x, cmap = cmap ))
         plt.axis('equal')
+        if pic : 
+            plt.savefig('res_' + dir + '.png', format='png', dpi=200)
         return
         
     def __str__(self):
@@ -428,6 +557,35 @@ class FEM_Model() :
             for i in range(len(self.mesh.node_list)) : 
                 tab.add_row([int(i+1), self.React[i][0], self.React[i+1][0], self.React[i+2][0], self.React[i+3][0], self.React[i+4][0], self.React[i+5][0]])
         print(tab)
+    
+    def rapport(self) : 
+        doc = DocxTemplate("cctr_template.docx")
+        
+        im_load = InlineImage(doc, image_descriptor='load.png', width=Mm(150), height=Mm(100))
+        im_res_x = InlineImage(doc, image_descriptor='res_x.png', width=Mm(150), height=Mm(100))
+        im_res_y = InlineImage(doc, image_descriptor='res_y.png', width=Mm(150), height=Mm(100))
+        im_res_sum = InlineImage(doc, image_descriptor='res_sum.png', width=Mm(150), height=Mm(100))
+        ts = time.time()
+        st = datetime.datetime.fromtimestamp(ts).strftime("%d/%m/%y - %H:%M")
+        short_st = datetime.datetime.fromtimestamp(ts).strftime("%d_%m_%M%H")
+        
+        res = self.res
+        
+        context = { 'date' : st,
+                   'bois' :'C24',
+                   'var' : 30,
+                   'Image' : 
+                       { 'load' : im_load , 
+                        'res_x' : im_res_x ,
+                        'res_y' : im_res_y ,
+                        'res_sum' : im_res_sum 
+                        } ,
+                   'res' : res
+                   }
+        
+        doc.render(context)
+        doc.save("Rapport_" + short_st + ".docx")
+        return print("Rapport genéré avec succès")
 
 def test_3d() :
     m1 = Mesh(3,[[0,0,0]],[[1,2]])
@@ -443,7 +601,9 @@ def test_3d() :
     return
 
 def test_2d() : 
-    mesh = Mesh(2,[[0,0],[2,0]],[[1,2]])
+    mesh = Mesh(2,[[0,0],[2,0]],[[1,2]],debug = True)
+    mesh.add_node([4,0])
+    mesh.del_node([5,0])
     mesh.add_node([4,0])
     mesh.add_node([2,3])
     mesh.add_element([2,3])
@@ -451,24 +611,26 @@ def test_2d() :
     mesh.add_element([4,1])
     mesh.add_element([4,2])
     #mesh.geom()
-    mesh.node_table()
+    #mesh.node_table()
     
     f = FEM_Model(mesh)
     f.apply_load([0,-1000,0],4)
     f.apply_bc([1,1,1],1)
     f.apply_bc([1,1,0],3)
+    f.get_bc()
     f.apply_distributed_load(1000, [1,2])
     f.apply_distributed_load(1000, [2,3])
-    f.plot_forces()
+    f.plot_forces(pic = True)
     f.solver_frame()
-    U, React = f.get_res()
-    f.plot_disp_f(dir='x')
-    f.plot_disp_f(dir='y')
-    f.plot_disp_f(dir='sum')
+    U, React, res = f.get_res()
+    f.plot_disp_f(dir='x', pic = True)
+    f.plot_disp_f(dir='y' , pic = True)
+    f.plot_disp_f(dir='sum', pic = True)
     f.plot_disp_f_ex()
-    f.U_table()
-    f.R_table()
+    #f.U_table()
+    #f.R_table()
     f.stress()
+    #f.rapport()
     return 
 
 def test_cantilever() : 
@@ -493,3 +655,9 @@ def test_cantilever() :
 
 if __name__ == "__main__" :
     test_2d()
+    
+"""
+TODO : 
+    [] arrondi en notation scientifique en python
+    []
+"""
