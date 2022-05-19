@@ -25,6 +25,22 @@ rcParams["figure.figsize"] = (8,6)
 rcParams['font.family'] = 'serif'
 rcParams['font.size'] = 10
 from mpl_toolkits import mplot3d
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d import proj3d
+
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        FancyArrowPatch.__init__(self, (0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def draw(self, renderer):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, renderer.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+        FancyArrowPatch.draw(self, renderer)
+        
+from matplotlib.patches import Rectangle, Polygon
 #%matplotlib notebook
 from matplotlib.animation import FuncAnimation
 from docxtpl import DocxTemplate, InlineImage
@@ -109,7 +125,7 @@ class Mesh :
                 print(self.element_list)
     
     def del_element(self, element) : 
-        if len(element) != 2 : 
+        if len(element) != self.dim : 
             print("Error : uncorrect element format")
         else :
             found, index = self.check_elem(element)
@@ -144,9 +160,9 @@ class Mesh :
     
     def geom(self, pic = False) : 
         if self.dim == 2 :
-            fig = self.geom2D()
+            fig = self.geom2D(pic)
         else : 
-            fig = self.geom3D()
+            fig = self.geom3D(pic)
         return fig
     
     def geom2D(self, pic = False) : 
@@ -277,28 +293,52 @@ class FEM_Model() :
         print(self.sig)
         
     
-    def K_elem_3d(self,L,E,S,Iy,Iz,G,J) :
-        Ktc = E*S/L
-        KT = G*J/L
-        Kf1 =  12*E*Iy/(L**3)
-        Kf2 =  12*E*Iz/(L**3)
-        Kf3 = 1
-        Kf4 = 1
-        K_elem = np.array([[Ktc, 0, 0, 0, 0, 0, -Ktc, 0, 0, 0, 0, 0],
-                            [0, Kf1 , 0, 0, Kf2, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [-Ktc, 0, 0 , S, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+    def K_elem_3d(self, L : float , E : float , S : float , Iy : float , Iz : float , G : float , J : float , ay : float = 0, az : float = 0) -> np.array :
+        """ Calcul de la matrice de raideur avec prise en compte de l'énergie cisaillement avec les termes ay et az.
+    
+        :param L: longueur de l'element
+        :type L: float
+        :param E: Module d'Young
+        :type E: float
+        :param S: Section
+        :type S: float
+        :param Iy: Inertie
+        :type Iy: float
+        :param Iz: Inertie
+        :type Iz: float
+        :param G: Module de coulomb
+        :type G: float
+        :param J: Module de torsion
+        :type J: float
+        :param ay:
+        :type ay:
+        :param az:
+        :type az:
+        :return: matrice de raideur en 3D
+        :rtype: np.array
+        """
+        Ktc = E * S / L
+        KT = G * J / L
+        Kf1 = 12 * E * Iz / (L ** 3 * (1 + az))
+        Kf2 = 12 * E * Iy / (L ** 3 * (1 + ay))
+        Kf3 = -6 * E * Iy / (L ** 2 * (1 + ay))
+        Kf4 = 6 * E * Iz / (L ** 2 * (1 + az))
+        Kf5 = (4 + ay) * E * Iy / (L * (1 + ay))
+        Kf6 = (4 + az) * E * Iz / (L * (1 + az))
+        K_elem = np.array([[Ktc, 0, 0, 0, 0, 0, -Ktc, 0, 0, 0, 0, 0], #1
+                           [0, Kf1, 0, 0, 0, Kf4, 0, -Kf1, 0, 0, 0, Kf4],
+                           [0, 0, Kf2, 0, Kf3, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, KT, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, Kf5, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, Kf6, 0, 0, 0, 0, 0, 0],
+                           [-Ktc, 0, 0, 0, 0, 0, Ktc, 0, 0, 0, 0, 0, 0], #7
+                           [0, 0, 0, 0, 0, 0, 0, Kf1, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, Kf2, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, KT, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Kf5, 0],
+                           [0, Kf4, 0, 0, 0, 0, 0, 0, 0, 0, 0, Kf6]])
         return K_elem
         
-    
     def changement_base(self,P,M) : 
         return P.dot(M).dot(np.transpose(P))
 
@@ -408,6 +448,76 @@ class FEM_Model() :
             self.res['elem'].append({'elem' : i + 1 , 'node i' : self.mesh.element_list[i][0] , 'node j' : self.mesh.element_list[i][1]})
         return self.U, self.React, self.res
     
+    
+    def charge_2D(self, pt1, pt2, q):
+        x1, x2 = pt1[0], pt2[0]
+        y1, y2 = pt1[1], pt2[1]
+        dx, dy = x2 - x1, y2 - y1
+        L = np.sqrt(dx ** 2 + dy ** 2)
+        a = np.arctan(dy / dx)
+        x = np.linspace(pt1[0], pt2[0], 11)
+        y = np.linspace(pt1[1], pt2[1], 11)
+    
+        ax = plt.subplot(111)
+        for i in range(0, 11):
+            plt.arrow(x[i],  # x1
+                     y[i] + 1,  # y1
+                     0,  # x2 - x1
+                     -1,  # y2 - y1
+                     color='r',
+                     lw=1,
+                     length_includes_head=True,
+                     head_width=0.02,
+                     head_length=0.05,
+                     zorder = 6)
+        plt.plot([pt1[0], pt2[0]], [pt1[1] + 1, pt2[1] + 1], lw=1, color='r', zorder = 6)
+        ax.text(x1 , y1 + dy,
+                "q = " + str(q) + " kN/m",
+                size=10, zorder=2, color="k")
+        x = [pt1[0], pt2[0], pt2[0], pt1[0], pt1[0]]
+        y = [pt1[1], pt2[1], pt2[1]+1, pt1[1]+1, pt1[1]]
+    
+        ax.add_patch(Polygon(xy=list(zip(x, y)), fill=True, color='red', alpha=0.1, lw=0))
+        return
+    
+    def charge_3D(self, pt1, pt2, q):
+        x1, x2 = pt1[0], pt2[0]
+        y1, y2 = pt1[1], pt2[1]
+        z1, z2 = pt1[2], pt2[2]
+        dx, dy, dz = x2 - x1, y2 - y1, z2 - z1
+        L = np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+        #a = np.arctan(dy / dx)
+        nb_pt = 5
+        amplitude = 1
+        x = np.linspace(x1, x2, nb_pt)
+        y = np.linspace(y1, y2, nb_pt)
+        z = np.linspace(z1, z2, nb_pt)
+    
+        fig = plt.figure(figsize=(8,6))
+        ax = fig.add_subplot(111, projection='3d')
+    
+        for i in range(0, nb_pt):
+            a = Arrow3D([x[i], x[i]], 
+                        [y[i], y[i]], 
+                        [z[i] + amplitude , z[i]], 
+                        mutation_scale=10, 
+                        lw=2, arrowstyle="-|>", color="r")
+            ax.add_artist(a)
+        line, = ax.plot([x1, x2 ], [y1, y2], [z1 + amplitude, z2 + amplitude], color='r', lw=1, linestyle='--')
+        line.set_label('undeformed')
+        ax.text(x1 + dx/2, y1 + dy/2, z1 + dz/2,
+                "q = " + str(q) + " kN/m",
+                size=20, zorder=2, color="k")
+        max_range = np.array([x.max()-x.min(), y.max()-y.min(), z.max()-z.min()]).max() / 2.0 + amplitude
+        mid_x = (x.max()+x.min()) * 0.5
+        mid_y = (y.max()+y.min()) * 0.5
+        mid_z = (z.max()+z.min()) * 0.5
+        ax.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax.set_ylim(mid_y - max_range, mid_y + max_range)
+        ax.set_zlim(mid_z - max_range, mid_z + max_range)
+        plt.show()
+        return
+    
     def plot_forces(self, pic = False) :
         plt.figure()
         F = self.load
@@ -418,6 +528,7 @@ class FEM_Model() :
         size = 200
         offset = size/40000.
         plt.scatter(x, y, c='y', s=size, zorder=5)
+        self.charge_2D([0,0],[2,3],4)
         for i, location in enumerate(zip(x,y)):
             plt.annotate(i+1, (location[0]-offset, location[1]-offset), zorder=10)
         for i in range(len(self.mesh.element_list)) :
@@ -539,11 +650,20 @@ class FEM_Model() :
         if self.mesh.dim == 2 :
             tab.field_names = ["Node","Ux", "Uy", "Phi"]
             for i in range(len(self.mesh.node_list)) : 
-                tab.add_row([int(i+1), self.U[i][0], self.U[i+1][0], self.U[i+2][0]])
-        else : 
+                tab.add_row([int(i+1),
+                             np.format_float_scientific(self.U[i][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+1][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+2][0], precision = 2, exp_digits=2)])
+        else :
             tab.field_names = ["Node","Ux", "Uy", "Uz", "Phix", "Phiy", "Phiz"]
             for i in range(len(self.mesh.node_list)) : 
-                tab.add_row([int(i+1), self.U[i][0], self.U[i+1][0], self.U[i+2][0], self.U[i+3][0], self.U[i+4][0], self.U[i+5][0]])
+                tab.add_row([int(i+1), 
+                             np.format_float_scientific(self.U[i][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+1][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+2][0], precision = 2, exp_digits=2), 
+                             np.format_float_scientific(self.U[i+3][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+4][0], precision = 2, exp_digits=2),
+                            np.format_float_scientific(self.U[i+5][0], precision = 2, exp_digits=2)])
         print(tab)
         
     def R_table(self):
@@ -598,6 +718,8 @@ def test_3d() :
     print(m1)
     m1.geom()
     m1.node_table()
+    f = FEM_Model(m1)
+    f.charge_3D([0,0,0],[1,1,1],5)
     return
 
 def test_2d() : 
@@ -656,8 +778,12 @@ def test_cantilever() :
 if __name__ == "__main__" :
     test_2d()
     
-"""
+'''
 TODO : 
-    [] arrondi en notation scientifique en python
-    []
-"""
+    [x] arrondi en notation scientifique en python
+    [x] visuel charge répartie
+    [] bien gérer la génération d'une charge répartie et d'une charge ponctuelle
+    [] sortie format json ou dictionnaire ?
+    [] nettoyage du code 
+    [] ajouter des docstrings
+'''
