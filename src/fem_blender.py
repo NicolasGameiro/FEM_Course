@@ -5,13 +5,13 @@ Created on Wed May 11 18:23:33 2022
 @author: ngameiro
 """
 
-import bpy
+#import bpy
 import csv
 import numpy as np
 from numpy import genfromtxt
-import mathutils
+#import mathutils
 import math
-from mathutils import Matrix
+#from mathutils import Matrix
 
 def importdata(v_path, e_path, c_path) : 
     vertices = genfromtxt(v_path, delimiter = ',')
@@ -19,7 +19,7 @@ def importdata(v_path, e_path, c_path) :
     color = genfromtxt(c_path, delimiter = ',')
     return vertices, edges, color
 
-def calculateRatationMatrix(posI,posJ) : 
+def calculateRotationMatrix(posI,posJ) : 
     R = np.identity(4)
     ix = posI[0]
     iy = posI[1]
@@ -56,7 +56,7 @@ def calculateRatationMatrix(posI,posJ) :
     rotationMatrix = np.array([local_x_unit, local_y_unit, local_z_unit]).T
     
     R[0:3,0:3] = rotationMatrix
-    return Matrix(R), length
+    return rotationMatrix, length
 
 def calculateTransformationMatrix(posI,posJ) : 
     offset = posI  + 0.5*(posJ - posI).T
@@ -74,8 +74,12 @@ def generateElement(scale , length , num , forceMag) :
          scale = (1 , 1 ,1)
          )
     bpy.ops.object.shade_smooth()
-    ico = bpy.context..object
+    ico = bpy.context.object
     ico.name = 'Node ' + str(num)
     return ico
 
-def 
+if __name__ == "__main__":
+    posI, posJ = (0,0,0), (0,0,1)
+    R, length = calculateRotationMatrix(posI,posJ)
+    print(R,length)
+    
